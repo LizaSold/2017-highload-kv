@@ -22,6 +22,10 @@ public class MyFileDAO implements MyDAO{
     @Override
     public byte[] get(@NotNull final String key) throws NoSuchElementException, IllegalArgumentException, IOException{
         final File file = getFile(key);
+        if (!file.exists()){
+            throw new  NoSuchElementException();
+        }
+
         final byte[] value = new byte[(int) file.length()];
         try(InputStream is = new FileInputStream(file)){
             if (is.read(value) !=value.length) {
