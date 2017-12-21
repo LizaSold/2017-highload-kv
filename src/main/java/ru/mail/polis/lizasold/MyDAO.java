@@ -14,4 +14,8 @@ public interface MyDAO {
 
     @NotNull
     void delete(@NotNull String key) throws IllegalArgumentException, IOException;
+
+    boolean isExist(@NotNull final String key) throws IllegalArgumentException, IOException;
+
+    boolean isDeleted(@NotNull final String key);
 }

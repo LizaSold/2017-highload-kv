@@ -50,6 +50,6 @@ final class KVServiceFactory {
             throw new IllegalArgumentException("Path is not a directory: " + data);
         }
 
-        return new MyService(port, new MyFileDAO(data));
+        return new MyService(port, new MyFileDAO(data), topology);
     }
 }

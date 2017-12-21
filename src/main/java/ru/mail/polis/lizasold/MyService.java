@@ -3,25 +3,42 @@ package ru.mail.polis.lizasold;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.fluent.Request;
 import org.jetbrains.annotations.NotNull;
 import ru.mail.polis.KVService;
+import ru.mail.polis.lizasold.ServiceManager.*;
+import ru.mail.polis.lizasold.ErrorHandler;
+
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.util.NoSuchElementException;
+import java.util.*;
 
-public class MyService implements KVService{
+public class MyService implements KVService {
     private static final String PREFIX = "id=";
+    private static final String REPLICAS = "&replicas=";
     @NotNull
-    private final HttpServer server;
+    private HttpServer server;
     @NotNull
-    private final MyDAO dao;
+    private MyDAO dao;
+    @NotNull
+    private Set<String> topology;
+    private int Myport;
+    ServiceManager sm;
+    ErrorHandler eh;
 
 
-    public MyService(int port, @NotNull MyDAO dao) throws IOException{
-        this.server = HttpServer.create(new InetSocketAddress(port),0);
+    public MyService(int port, @NotNull MyDAO dao, @NotNull Set<String> topology) throws IOException {
+        this.server = HttpServer.create(new InetSocketAddress(port), 0);
         this.dao = dao;
+        this.Myport = port;
+        this.topology = new HashSet<>(topology);
+        sm = new ServiceManager(port, dao, topology);
+        createContext();
+    }
 
+    private void createContext() {
         this.server.createContext("/v0/status", http -> {
             final String response = "ONLINE";
             http.sendResponseHeaders(200, response.length());
@@ -29,78 +46,100 @@ public class MyService implements KVService{
             http.close();
         });
 
-        this.server.createContext("/v0/entity", new ErrorHandler( http -> {
-
-                final String id = extractId(http.getRequestURI().getQuery());
+        this.server.createContext("/v0/entity", new ErrorHandler(http -> {
+            final String query = http.getRequestURI().getQuery();
+            final String id = extractId(http.getRequestURI().getQuery());
+            if (!query.contains(REPLICAS)) {
                 switch (http.getRequestMethod()) {
                     case "GET":
                         final byte[] getValue = dao.get(id);
                         http.sendResponseHeaders(200, getValue.length);
                         http.getResponseBody().write(getValue);
                         break;
+                    case "PUT":
+                        byte[] putValue = {};
+                        putValue = sm.putValueNew(http.getRequestBody());
+                        dao.upsert(id, putValue);
+                        http.sendResponseHeaders(201, 0);
+                        break;
                     case "DELETE":
                         dao.delete(id);
                         http.sendResponseHeaders(202, 0);
-                        break;
-                    case "PUT":
-                        final int contentLength = Integer.valueOf(http.getRequestHeaders().getFirst("Content-Length"));
-                        final byte[] putValue = new byte[contentLength];
-                        if (contentLength>0 && http.getRequestBody().read(putValue) != putValue.length) {
-                            throw new IOException("Can't read");
-                        }
-                        dao.upsert(id, putValue);
-                        http.sendResponseHeaders(201, 0);
                         break;
 
                     default:
                         http.sendResponseHeaders(405, 0);
                         break;
                 }
+            } else {
+                final String replicas = extractReplicas(query);
+                int ack = -1;
+                int from = -1;
+                ack = Integer.valueOf(replicas.split("/")[0]);
+                from = Integer.valueOf(replicas.split("/")[1]);
+                if (ack > from || ack == 0 || from == 0) {
+                    throw new IllegalArgumentException("Check replicas");
+                }
+                if (ack == -1 || from == -1) {
+                    ack = topology.size() / 2 + 1;
+                    from = topology.size();
+                }
+                switch (http.getRequestMethod()) {
+                    case "GET":
+                        sm.requestGet(http, id, ack, from);
+                        break;
+                    case "PUT":
+                        sm.requestPut(http, id, ack, from);
+                        break;
+                    case "DELETE":
+                        sm.requestDelete(http, id, ack, from);
+                        break;
+
+                    default:
+                        http.sendResponseHeaders(201, 0);
+                        break;
+                }
+            }
 
             http.close();
         }));
 
     }
+
     @NotNull
-    private static String extractId(@NotNull final String query){
-        if (!query.startsWith(PREFIX)){
+    private static String extractId(@NotNull final String query) {
+        if (!query.startsWith(PREFIX)) {
             throw new IllegalArgumentException("WHAT?");
         }
-        final String id=query.substring(PREFIX.length());
-        if(id.isEmpty()){
+        String paramId = query.split(REPLICAS)[0];
+        if (paramId.substring(PREFIX.length()).isEmpty()) {
             throw new IllegalArgumentException("Check id");
         }
+        final String id = paramId.substring(PREFIX.length());
         return id;
     }
 
+    @NotNull
+    private static String extractReplicas(@NotNull final String query) {
+        if (!query.contains(REPLICAS)) {
+            throw new IllegalArgumentException("WHAT?");
+        }
+        String paramReplicas = query.split(REPLICAS)[1];
+        if (paramReplicas.isEmpty()) {
+            throw new IllegalArgumentException("Check replicas");
+        }
+        final String replicas = paramReplicas;
+        return replicas;
+    }
+
     @Override
-    public void start(){
+    public void start() {
         this.server.start();
     }
 
     @Override
-    public void stop(){
+    public void stop() {
         this.server.stop(0);
     }
- private static class ErrorHandler implements HttpHandler{
-        private final HttpHandler delegate;
-
-     private ErrorHandler(HttpHandler delegate) {
-         this.delegate = delegate;
-     }
-
-     @Override
-     public void handle(HttpExchange httpExchange) throws IOException {
-         try {
-             delegate.handle(httpExchange);
-         }catch (NoSuchElementException e){
-             httpExchange.sendResponseHeaders(404,0);
-             httpExchange.close();
-         }catch (IllegalArgumentException e){
-             httpExchange.sendResponseHeaders(400,0);
-             httpExchange.close();
-         }
-     }
- }
 
 }
