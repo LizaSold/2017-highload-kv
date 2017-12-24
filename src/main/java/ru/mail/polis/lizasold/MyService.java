@@ -1,14 +1,8 @@
 package ru.mail.polis.lizasold;
 
-import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
-import org.apache.http.HttpResponse;
-import org.apache.http.client.fluent.Request;
 import org.jetbrains.annotations.NotNull;
 import ru.mail.polis.KVService;
-import ru.mail.polis.lizasold.ServiceManager.*;
-import ru.mail.polis.lizasold.ErrorHandler;
 
 
 import java.io.IOException;
@@ -57,8 +51,7 @@ public class MyService implements KVService {
                         http.getResponseBody().write(getValue);
                         break;
                     case "PUT":
-                        byte[] putValue = {};
-                        putValue = sm.putValueNew(http.getRequestBody());
+                        byte[] putValue = sm.putValueNew(http.getRequestBody());
                         dao.upsert(id, putValue);
                         http.sendResponseHeaders(201, 0);
                         break;

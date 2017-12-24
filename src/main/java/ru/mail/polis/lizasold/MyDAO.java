@@ -8,14 +8,16 @@ import java.util.NoSuchElementException;
 public interface MyDAO {
 
     @NotNull
-    byte[] get(@NotNull String key) throws NoSuchElementException, IllegalArgumentException, IOException;
+    byte[] get(@NotNull String key) throws NoSuchElementException, IOException;
 
-    void upsert(@NotNull String key, @NotNull byte[] value)throws IllegalArgumentException, IOException;
+    void upsert(@NotNull String key, @NotNull byte[] value) throws IOException;
 
     @NotNull
-    void delete(@NotNull String key) throws IllegalArgumentException, IOException;
+    void delete(@NotNull String key) throws IOException;
 
-    boolean isExist(@NotNull final String key) throws IllegalArgumentException, IOException;
+    void createDeletedDir();
 
-    boolean isDeleted(@NotNull final String key);
+    boolean isExist(@NotNull final String key) throws IOException;
+
+    boolean isDeleted(@NotNull final String key) throws IOException;
 }

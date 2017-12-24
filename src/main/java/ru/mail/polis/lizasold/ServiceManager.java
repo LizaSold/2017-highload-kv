@@ -1,10 +1,8 @@
 package ru.mail.polis.lizasold;
 
 import com.sun.net.httpserver.HttpExchange;
-import org.apache.http.HttpRequest;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.fluent.Request;
-import org.apache.http.client.fluent.Response;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.ByteArrayOutputStream;
@@ -13,14 +11,13 @@ import java.io.InputStream;
 import java.util.HashSet;
 import java.util.NoSuchElementException;
 import java.util.Set;
-import java.util.concurrent.FutureTask;
 
 public class ServiceManager {
     private int[] ports;
     private String[] hosts;
-    private int Myport;
+    private int myPort;
     @NotNull
-    private MyDAO dao;
+    private final MyDAO dao;
     @NotNull
     private Set<String> topology;
     private int code;
@@ -34,25 +31,25 @@ public class ServiceManager {
         tp = new TopologyParams(topology);
         this.hosts = tp.getHosts(topology);
         this.ports = tp.getPorts(topology);
-        this.Myport = port;
+        this.myPort = port;
         this.dao = dao;
         this.code = 0;
-        this.goodReplicas = 0;
-        this.emptyReplicas = 0;
-        this.deletedReplicas = 0;
     }
 
     public void requestGet(@NotNull HttpExchange http, String id, int ack, int from) throws IOException {
-        System.out.println("get" + dao.get(id)[0]);
+        goodReplicas = 0;
+        emptyReplicas = 0;
+        deletedReplicas = 0;
+
         byte[] getValue = {};
 
-        for (int i = 0; i < hosts.length; i++) {
-            if (ports[i] == Myport) {
+        for (int i = 0; goodReplicas + emptyReplicas < from && i < hosts.length; i++) {
+            if (ports[i] == myPort) {
                 if (checkMyport(i, id)) {
                     try {
                         if (dao.isDeleted(id)) deletedReplicas++;
                         else if (dao.get(id).length == 0) emptyReplicas++;
-                        else if (dao.get(id).length >= getValue.length) {
+                        else {
                             getValue = dao.get(id);
                             goodReplicas++;
                         }
@@ -61,23 +58,25 @@ public class ServiceManager {
                     }
                 } else emptyReplicas++;
                 continue;
+
             }
             try {
                 HttpResponse res;
                 res = Request.Get(getUrl(ports[i], id)).execute().returnResponse();
                 code = res.getStatusLine().getStatusCode();
-            }catch (IOException e){
+            } catch (IOException e) {
                 continue;
             }
-
-            getValue=getValueNew(i, id);
-
-            if (code == 202) deletedReplicas++;
+            getValue = getValueNew(i, id);
+            if (code == 404) {
+                if (MyFileDAO.del = true) deletedReplicas++;
+                else emptyReplicas++;
+            }
             countReplicas(code);
         }
 
         if ((goodReplicas + emptyReplicas + deletedReplicas) < ack) {
-            http.sendResponseHeaders(504, 0);
+            throw new NullPointerException("Not enough replicas");
         } else if (deletedReplicas > 0 || emptyReplicas >= ack) {
             throw new NoSuchElementException("Not found");
         } else {
@@ -85,15 +84,17 @@ public class ServiceManager {
             http.getResponseBody().write(getValue);
         }
 
+
         http.close();
     }
 
     public void requestPut(@NotNull HttpExchange http, String id, int ack, int from) throws IOException {
+        goodReplicas = 0;
 
         byte[] putValue = {};
         putValue = putValueNew(http.getRequestBody());
         for (int i = 0; goodReplicas < from && i < hosts.length; i++) {
-            if (ports[i] == Myport) {
+            if (ports[i] == myPort) {
                 if (checkMyport(i, id)) {
                     dao.upsert(id, putValue);
                     break;
@@ -104,27 +105,16 @@ public class ServiceManager {
             }
 
             try {
-                HttpResponse res = Request.Get(getUrl(ports[i], id)).execute().returnResponse();
-                code = res.getStatusLine().getStatusCode();
-            } catch (IOException e) {
-                continue;
-            }
-
-            if (code == 201) {
-                break;
-            }
-            try {
                 HttpResponse res = Request.Put(getUrl(ports[i], id)).bodyByteArray(putValue).execute().returnResponse();
                 code = res.getStatusLine().getStatusCode();
             } catch (IOException e) {
                 continue;
             }
             countReplicas(code);
+            if (code == 404) emptyReplicas++;
         }
 
-
-
-        if (goodReplicas < ack) http.sendResponseHeaders(504, 0);
+        if (goodReplicas < ack) throw new NullPointerException("Not enough replicas");
         else http.sendResponseHeaders(201, 0);
 
         http.close();
@@ -132,9 +122,11 @@ public class ServiceManager {
 
 
     public void requestDelete(@NotNull HttpExchange http, String id, int ack, int from) throws IOException {
-
+        goodReplicas = 0;
+        emptyReplicas = 0;
+        deletedReplicas = 0;
         for (int i = 0; goodReplicas < from && i < hosts.length; i++) {
-            if (ports[i] == Myport) {
+            if (ports[i] == myPort) {
                 if (checkMyport(i, id)) {
                     dao.delete(id);
                     goodReplicas++;
@@ -142,17 +134,18 @@ public class ServiceManager {
                 continue;
             }
 
-            HttpResponse tmpStatus;
+            HttpResponse res;
             try {
-                tmpStatus = Request.Delete(getUrl(ports[i], id)).execute().returnResponse();
+                res = Request.Delete(getUrl(ports[i], id)).execute().returnResponse();
             } catch (IOException e) {
                 continue;
             }
-            code = tmpStatus.getStatusLine().getStatusCode();
-            if (code == 202) goodReplicas++;
+            code = res.getStatusLine().getStatusCode();
+            countReplicas(code);
 
         }
-        if (goodReplicas < ack) http.sendResponseHeaders(504, 0);
+
+        if (goodReplicas < ack) throw new NullPointerException("Not enough replicas");
         else http.sendResponseHeaders(202, 0);
 
         http.close();
@@ -165,14 +158,12 @@ public class ServiceManager {
     }
 
     void countReplicas(int code) {
-        if (code == 200 || code == 201) goodReplicas++;
-        else if (code == 404) emptyReplicas++;
+        if (code == 200 || code == 201 || code == 202) goodReplicas++;
     }
 
     private boolean checkMyport(int i, @NotNull final String id) throws IOException {
         if (dao.isExist(id) || dao.isDeleted(id)) return true;
         return false;
-
     }
 
     public byte[] getValueNew(int i, String id) throws IOException {
@@ -183,12 +174,13 @@ public class ServiceManager {
             return out.toByteArray();
         }
     }
-    public byte[] putValueNew(InputStream in)throws IOException {
+
+    public byte[] putValueNew(InputStream in) throws IOException {
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             byte putValue[] = new byte[1024];
             int contentLenght = in.read(putValue);
-            if (contentLenght  > 0) out.write(putValue, 0, contentLenght );
-            return  out.toByteArray();
+            if (contentLenght > 0) out.write(putValue, 0, contentLenght);
+            return out.toByteArray();
         }
     }
 }

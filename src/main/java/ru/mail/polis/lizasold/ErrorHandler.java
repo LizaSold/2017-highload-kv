@@ -6,7 +6,7 @@ import com.sun.net.httpserver.HttpHandler;
 import java.io.IOException;
 import java.util.NoSuchElementException;
 
-public class ErrorHandler implements HttpHandler{
+public class ErrorHandler implements HttpHandler {
     private final HttpHandler delegate;
 
     public ErrorHandler(HttpHandler delegate) {
@@ -14,18 +14,19 @@ public class ErrorHandler implements HttpHandler{
     }
 
     @Override
-    public void handle(HttpExchange httpExchange) throws IOException {
+    public void handle(HttpExchange http) throws IOException {
         try {
-            delegate.handle(httpExchange);
+            delegate.handle(http);
         } catch (NoSuchElementException e) {
-            httpExchange.sendResponseHeaders(404, 0);
-            httpExchange.close();
+            http.sendResponseHeaders(404, 0);
+            http.close();
         } catch (IllegalArgumentException e) {
-            httpExchange.sendResponseHeaders(400, 0);
-            httpExchange.close();
-                }
-
-
+            http.sendResponseHeaders(400, 0);
+            http.close();
+        } catch (NullPointerException e) {
+            http.sendResponseHeaders(504, 0);
+            http.close();
+        }
     }
 }
 

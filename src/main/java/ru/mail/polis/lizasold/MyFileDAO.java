@@ -3,60 +3,61 @@ package ru.mail.polis.lizasold;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.*;
-import java.util.HashSet;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.NoSuchElementException;
+
 
 public class MyFileDAO implements MyDAO {
 
+    public static boolean del;
     @NotNull
-    private final File dir;
+    private final String dir;
     @NotNull
-    public HashSet<String> deletedSet;
-    @NotNull
-    private File getFile(@NotNull final String key){
-        return new File(dir, key);
-    }
+    private final String deletedDir;
 
-    public MyFileDAO(@NotNull final File dir) {
+    public MyFileDAO(@NotNull String dir) {
         this.dir = dir;
-        this.deletedSet = new HashSet<>();
+        this.deletedDir = dir + "/deletedDir";
+        createDeletedDir();
     }
 
     @NotNull
     @Override
-    public byte[] get(@NotNull final String key) throws NoSuchElementException, IllegalArgumentException, IOException {
-        final File file = getFile(key);
-        if (!isExist(key)) {
-            throw new  NoSuchElementException();
+    public byte[] get(@NotNull String id) throws NoSuchElementException, IOException {
+        del = false;
+        if (isDeleted(id)) {
+            del = true;
+            throw new NoSuchElementException("deleted");
+        } else if (Files.notExists(Paths.get(dir, id))) {
+            throw new NoSuchElementException("no file with id " + id);
         }
-        final byte[] value = new byte[(int) file.length()];
-        try(InputStream is = new FileInputStream(file)) {
-            is.read(value);
-        }
-
-        return value;
-    }
-    @Override
-    public void upsert(@NotNull final String key, @NotNull final byte[] value)throws IllegalArgumentException, IOException {
-        try(OutputStream os = new FileOutputStream(getFile(key))){
-             os.write(value);
-        }
+        return Files.readAllBytes(Paths.get(dir, id));
     }
 
     @Override
-    public void delete(@NotNull final String key) throws IllegalArgumentException, IOException {
-        getFile(key).delete();
-        deletedSet.add(key);
+    public void upsert(@NotNull String id, @NotNull byte[] value) throws IOException {
+        Files.write(Paths.get(dir, id), value);
     }
 
-    public boolean isExist(@NotNull final String key) throws IllegalArgumentException, IOException {
-        File file = new File(dir, key);
-        if (file.exists()) return true;
-        return false;
+    @Override
+    public void delete(@NotNull String id) throws IOException {
+        Files.createFile(Paths.get(deletedDir, id));
     }
 
-    public boolean isDeleted(@NotNull final String key) {
-        if (deletedSet.contains(key)) return true;
-        return false;
+    public void createDeletedDir() {
+        try {
+            Files.createDirectory(Paths.get(deletedDir));
+        } catch (IOException e) {
+        }
+    }
+
+    public boolean isExist(@NotNull final String id) throws IOException {
+        return Files.exists(Paths.get(dir, id));
+    }
+
+    public boolean isDeleted(@NotNull final String id) throws IOException {
+        return Files.exists(Paths.get(deletedDir, id));
     }
 }
+
