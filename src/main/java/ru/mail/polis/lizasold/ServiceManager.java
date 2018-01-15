@@ -21,9 +21,6 @@ public class ServiceManager {
     @NotNull
     private Set<String> topology;
     private int code;
-    private int goodReplicas;
-    private int emptyReplicas;
-    private int deletedReplicas;
     TopologyParams tp;
 
     public ServiceManager(int port, @NotNull MyDAO dao, @NotNull Set<String> topology) {
@@ -37,22 +34,19 @@ public class ServiceManager {
     }
 
     public void requestGet(@NotNull HttpExchange http, String id, int ack, int from) throws IOException {
-        goodReplicas = 0;
-        emptyReplicas = 0;
-        deletedReplicas = 0;
+        int goodReplicas = 0;
+        int emptyReplicas = 0;
+        int deletedReplicas = 0;
 
         byte[] getValue = {};
 
         for (int i = 0; goodReplicas + emptyReplicas < from && i < hosts.length; i++) {
             if (ports[i] == myPort) {
-                if (checkMyport(i, id)) {
+                if (dao.isExist(id)) {
                     try {
                         if (dao.isDeleted(id)) deletedReplicas++;
                         else if (dao.get(id).length == 0) emptyReplicas++;
-                        else {
-                            getValue = dao.get(id);
-                            goodReplicas++;
-                        }
+                        else goodReplicas++;
                     } catch (NoSuchElementException e) {
                         continue;
                     }
@@ -72,7 +66,7 @@ public class ServiceManager {
                 if (MyFileDAO.del = true) deletedReplicas++;
                 else emptyReplicas++;
             }
-            countReplicas(code);
+            if (code == 200) goodReplicas++;
         }
 
         if ((goodReplicas + emptyReplicas + deletedReplicas) < ack) {
@@ -89,14 +83,14 @@ public class ServiceManager {
     }
 
     public void requestPut(@NotNull HttpExchange http, String id, int ack, int from) throws IOException {
-        goodReplicas = 0;
+        int goodReplicas = 0;
 
-        byte[] putValue = {};
-        putValue = putValueNew(http.getRequestBody());
+        byte[] putValue = putValueNew(http.getRequestBody());
         for (int i = 0; goodReplicas < from && i < hosts.length; i++) {
             if (ports[i] == myPort) {
-                if (checkMyport(i, id)) {
+                if (dao.isExist(id)) {
                     dao.upsert(id, putValue);
+                    goodReplicas++;
                     break;
                 }
                 dao.upsert(id, putValue);
@@ -110,8 +104,7 @@ public class ServiceManager {
             } catch (IOException e) {
                 continue;
             }
-            countReplicas(code);
-            if (code == 404) emptyReplicas++;
+            if (code == 201) goodReplicas++;
         }
 
         if (goodReplicas < ack) throw new NullPointerException("Not enough replicas");
@@ -122,12 +115,10 @@ public class ServiceManager {
 
 
     public void requestDelete(@NotNull HttpExchange http, String id, int ack, int from) throws IOException {
-        goodReplicas = 0;
-        emptyReplicas = 0;
-        deletedReplicas = 0;
+        int goodReplicas = 0;
         for (int i = 0; goodReplicas < from && i < hosts.length; i++) {
             if (ports[i] == myPort) {
-                if (checkMyport(i, id)) {
+                if (dao.isExist(id)) {
                     dao.delete(id);
                     goodReplicas++;
                 }
@@ -141,7 +132,7 @@ public class ServiceManager {
                 continue;
             }
             code = res.getStatusLine().getStatusCode();
-            countReplicas(code);
+            if (code == 202) goodReplicas++;
 
         }
 
@@ -157,15 +148,6 @@ public class ServiceManager {
         return "http://localhost:" + port + "/v0/entity?id=" + id;
     }
 
-    void countReplicas(int code) {
-        if (code == 200 || code == 201 || code == 202) goodReplicas++;
-    }
-
-    private boolean checkMyport(int i, @NotNull final String id) throws IOException {
-        if (dao.isExist(id) || dao.isDeleted(id)) return true;
-        return false;
-    }
-
     public byte[] getValueNew(int i, String id) throws IOException {
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             HttpResponse res;
@@ -178,8 +160,11 @@ public class ServiceManager {
     public byte[] putValueNew(InputStream in) throws IOException {
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             byte putValue[] = new byte[1024];
-            int contentLenght = in.read(putValue);
-            if (contentLenght > 0) out.write(putValue, 0, contentLenght);
+            while (true) {
+                int contentLenght = in.read(putValue);
+                if (contentLenght > 0) out.write(putValue, 0, contentLenght);
+                if (putValue.length > 0) break;
+            }
             return out.toByteArray();
         }
     }

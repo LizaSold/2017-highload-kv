@@ -15,7 +15,7 @@ dependencies {
     compile("com.intellij:annotations:12.0")
 
     compile("org.apache.httpcomponents:fluent-hc:4.5.3")
-    
+
     // JUnit test framework
     testCompile("junit:junit:4.12")
 

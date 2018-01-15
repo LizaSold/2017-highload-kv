@@ -38,6 +38,7 @@ public class MyFileDAO implements MyDAO {
     @Override
     public void upsert(@NotNull String id, @NotNull byte[] value) throws IOException {
         Files.write(Paths.get(dir, id), value);
+        if (isDeleted(id)) Files.delete(Paths.get(deletedDir, id));
     }
 
     @Override
@@ -49,6 +50,7 @@ public class MyFileDAO implements MyDAO {
         try {
             Files.createDirectory(Paths.get(deletedDir));
         } catch (IOException e) {
+            //ignore
         }
     }
 

@@ -5,6 +5,7 @@ import org.jetbrains.annotations.NotNull;
 import ru.mail.polis.KVService;
 
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.*;
@@ -18,7 +19,7 @@ public class MyService implements KVService {
     private MyDAO dao;
     @NotNull
     private Set<String> topology;
-    private int Myport;
+    private int myPort;
     ServiceManager sm;
     ErrorHandler eh;
 
@@ -26,7 +27,7 @@ public class MyService implements KVService {
     public MyService(int port, @NotNull MyDAO dao, @NotNull Set<String> topology) throws IOException {
         this.server = HttpServer.create(new InetSocketAddress(port), 0);
         this.dao = dao;
-        this.Myport = port;
+        this.myPort = port;
         this.topology = new HashSet<>(topology);
         sm = new ServiceManager(port, dao, topology);
         createContext();
@@ -51,7 +52,14 @@ public class MyService implements KVService {
                         http.getResponseBody().write(getValue);
                         break;
                     case "PUT":
-                        byte[] putValue = sm.putValueNew(http.getRequestBody());
+                        byte[] putValue = new byte[1024];
+                        ByteArrayOutputStream out = new ByteArrayOutputStream();
+                        while (true) {
+                            int contentLenght = http.getRequestBody().read(putValue);
+                            if (contentLenght > 0) out.write(putValue, 0, contentLenght);
+                            if (putValue.length > 0) break;
+                        }
+                        putValue = out.toByteArray();
                         dao.upsert(id, putValue);
                         http.sendResponseHeaders(201, 0);
                         break;
@@ -119,6 +127,9 @@ public class MyService implements KVService {
         }
         String paramReplicas = query.split(REPLICAS)[1];
         if (paramReplicas.isEmpty()) {
+            throw new IllegalArgumentException("Check replicas");
+        }
+        if (!paramReplicas.matches("\\d*/\\d*")){
             throw new IllegalArgumentException("Check replicas");
         }
         final String replicas = paramReplicas;

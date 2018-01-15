@@ -28,7 +28,7 @@ public class StartStopTest extends TestBase {
     private static Set<String> endpoints;
     private static KVService storage;
     @Rule
-    public final Timeout globalTimeout = Timeout.seconds(TIMEOUT_MS * 2);
+    public final Timeout globalTimeout = Timeout.millis(TIMEOUT_MS * 2);
 
     @BeforeClass
     public static void beforeAll() throws IOException {

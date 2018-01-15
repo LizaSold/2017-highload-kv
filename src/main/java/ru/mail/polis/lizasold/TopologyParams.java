@@ -11,6 +11,7 @@ public class TopologyParams {
     public TopologyParams(@NotNull Set<String> topology){
         this.topology = new HashSet<>(topology);
     }
+
     public int[] getPorts(@NotNull final Set<String> topology) {
         String[] endpoints = topology.toArray(new String[topology.size()]);
         int[] ports = new int[topology.size()];
