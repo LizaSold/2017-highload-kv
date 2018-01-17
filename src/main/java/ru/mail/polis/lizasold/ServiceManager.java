@@ -160,12 +160,10 @@ public class ServiceManager {
     }
 
     public byte[] putValueNew(InputStream in) throws IOException {
-        long t=0;
-        try(ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             byte[] putValue = new byte[1024];
             while (true) {
                 int contentLenght = in.read(putValue);
-                t += contentLenght;
                 if (contentLenght == -1) break;
                 if (contentLenght > 0) out.write(putValue, 0, contentLenght);
             }

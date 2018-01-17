@@ -50,15 +50,12 @@ public class MyService implements KVService {
                         final byte[] getValue = dao.get(id);
                         http.sendResponseHeaders(200, getValue.length);
                         http.getResponseBody().write(getValue);
-                        //if (dao.isDeleted(id)) http.sendResponseHeaders(202,0);
                         break;
                     case "PUT":
-                        long t=0;
-                        try(ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
                             byte[] putValue = new byte[1024];
                             while (true) {
                                 int contentLenght = http.getRequestBody().read(putValue);
-                                t += contentLenght;
                                 if (contentLenght == -1) break;
                                 if (contentLenght > 0) out.write(putValue, 0, contentLenght);
                             }
@@ -119,7 +116,7 @@ public class MyService implements KVService {
 
     @NotNull
     private static String extractReplicas(@NotNull final String query) {
-        if (!query.matches("\\S*"+REPLICAS+"\\d*/\\d*")){
+        if (!query.matches("\\S*" + REPLICAS + "\\d*/\\d*")) {
             throw new IllegalArgumentException("Check replicas");
         }
         String replicas = query.substring(query.lastIndexOf(REPLICAS) + REPLICAS.length());
