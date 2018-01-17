@@ -50,40 +50,39 @@ public class MyService implements KVService {
                         final byte[] getValue = dao.get(id);
                         http.sendResponseHeaders(200, getValue.length);
                         http.getResponseBody().write(getValue);
+                        //if (dao.isDeleted(id)) http.sendResponseHeaders(202,0);
                         break;
                     case "PUT":
-                        byte[] putValue = new byte[1024];
-                        ByteArrayOutputStream out = new ByteArrayOutputStream();
-                        while (true) {
-                            int contentLenght = http.getRequestBody().read(putValue);
-                            if (contentLenght > 0) out.write(putValue, 0, contentLenght);
-                            if (putValue.length > 0) break;
+                        long t=0;
+                        try(ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                            byte[] putValue = new byte[1024];
+                            while (true) {
+                                int contentLenght = http.getRequestBody().read(putValue);
+                                t += contentLenght;
+                                if (contentLenght == -1) break;
+                                if (contentLenght > 0) out.write(putValue, 0, contentLenght);
+                            }
+                            putValue = out.toByteArray();
+                            dao.upsert(id, putValue);
+                            http.sendResponseHeaders(201, 0);
                         }
-                        putValue = out.toByteArray();
-                        dao.upsert(id, putValue);
-                        http.sendResponseHeaders(201, 0);
                         break;
                     case "DELETE":
                         dao.delete(id);
                         http.sendResponseHeaders(202, 0);
                         break;
-
                     default:
                         http.sendResponseHeaders(405, 0);
                         break;
                 }
             } else {
                 final String replicas = extractReplicas(query);
-                int ack = -1;
-                int from = -1;
+                int ack = topology.size() / 2 + 1;
+                int from = topology.size();
                 ack = Integer.valueOf(replicas.split("/")[0]);
                 from = Integer.valueOf(replicas.split("/")[1]);
                 if (ack > from || ack == 0 || from == 0) {
                     throw new IllegalArgumentException("Check replicas");
-                }
-                if (ack == -1 || from == -1) {
-                    ack = topology.size() / 2 + 1;
-                    from = topology.size();
                 }
                 switch (http.getRequestMethod()) {
                     case "GET":
@@ -97,14 +96,12 @@ public class MyService implements KVService {
                         break;
 
                     default:
-                        http.sendResponseHeaders(201, 0);
+                        http.sendResponseHeaders(405, 0);
                         break;
                 }
             }
-
             http.close();
         }));
-
     }
 
     @NotNull
@@ -122,17 +119,10 @@ public class MyService implements KVService {
 
     @NotNull
     private static String extractReplicas(@NotNull final String query) {
-        if (!query.contains(REPLICAS)) {
-            throw new IllegalArgumentException("WHAT?");
-        }
-        String paramReplicas = query.split(REPLICAS)[1];
-        if (paramReplicas.isEmpty()) {
+        if (!query.matches("\\S*"+REPLICAS+"\\d*/\\d*")){
             throw new IllegalArgumentException("Check replicas");
         }
-        if (!paramReplicas.matches("\\d*/\\d*")){
-            throw new IllegalArgumentException("Check replicas");
-        }
-        final String replicas = paramReplicas;
+        String replicas = query.substring(query.lastIndexOf(REPLICAS) + REPLICAS.length());
         return replicas;
     }
 

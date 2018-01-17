@@ -29,7 +29,7 @@ public class MyFileDAO implements MyDAO {
         if (isDeleted(id)) {
             del = true;
             throw new NoSuchElementException("deleted");
-        } else if (Files.notExists(Paths.get(dir, id))) {
+        } else if (!isExist(id)) {
             throw new NoSuchElementException("no file with id " + id);
         }
         return Files.readAllBytes(Paths.get(dir, id));
