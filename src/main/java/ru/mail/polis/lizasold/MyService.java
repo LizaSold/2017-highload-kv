@@ -1,9 +1,11 @@
 package ru.mail.polis.lizasold;
 
 import com.sun.net.httpserver.HttpServer;
+import com.sun.org.apache.regexp.internal.RE;
 import org.jetbrains.annotations.NotNull;
 import ru.mail.polis.KVService;
 
+import javax.management.Query;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.*;
@@ -105,11 +107,13 @@ public class MyService implements KVService {
         if (!query.startsWith(PREFIX)) {
             throw new IllegalArgumentException("WHAT?");
         }
-        String paramId = query.split(REPLICAS)[0];
-        if (paramId.substring(PREFIX.length()).isEmpty()) {
+        String id = query.substring(PREFIX.length());
+        if (query.contains(REPLICAS)) {
+            id = id.substring(0, id.indexOf(REPLICAS));
+        }
+        if (id.isEmpty()) {
             throw new IllegalArgumentException("Check id");
         }
-        final String id = paramId.substring(PREFIX.length());
         return id;
     }
 
