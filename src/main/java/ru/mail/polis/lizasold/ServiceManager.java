@@ -55,13 +55,19 @@ public class ServiceManager {
                     } else emptyReplicas++;
                     continue;
                 }
+                HttpResponse res;
                 try {
-                    HttpResponse res = Request.Get(getUrl(me.getKey(), id)).execute().returnResponse();
+                    res = Request.Get(getUrl(me.getKey(), id)).execute().returnResponse();
                     code = res.getStatusLine().getStatusCode();
                 } catch (IOException e) {
                     continue;
                 }
-                getValue = getValueNew(me.getKey(), id);
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                res.getEntity().writeTo(out);
+                if (out.toByteArray().length > getValue.length) {
+                    getValue = out.toByteArray();
+                }
+
                 if (code == 200) goodReplicas++;
                 if (code == 404) emptyReplicas++;
                 if (code == 202) deletedReplicas++;
@@ -142,14 +148,6 @@ public class ServiceManager {
     @NotNull
     private String getUrl(final int port, @NotNull final String id) {
         return "http://localhost:" + port + "/v0/entity?id=" + id + "&inside";
-    }
-
-    public byte[] getValueNew(int portMe, String id) throws IOException {
-        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            HttpResponse res = Request.Get(getUrl(portMe, id)).execute().returnResponse();
-            res.getEntity().writeTo(out);
-            return out.toByteArray();
-        }
     }
 
 }
