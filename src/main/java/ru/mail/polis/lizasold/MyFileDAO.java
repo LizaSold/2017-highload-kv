@@ -10,7 +10,6 @@ import java.util.NoSuchElementException;
 
 public class MyFileDAO implements MyDAO {
 
-    public static boolean del;
     @NotNull
     private final String dir;
     @NotNull
@@ -25,9 +24,7 @@ public class MyFileDAO implements MyDAO {
     @NotNull
     @Override
     public byte[] get(@NotNull String id) throws NoSuchElementException, IOException {
-        del = false;
         if (isDeleted(id)) {
-            del = true;
             throw new NoSuchElementException("deleted");
         } else if (!isExist(id)) {
             throw new NoSuchElementException("no file with id " + id);
@@ -61,5 +58,6 @@ public class MyFileDAO implements MyDAO {
     public boolean isDeleted(@NotNull final String id) throws IOException {
         return Files.exists(Paths.get(deletedDir, id));
     }
+
 }
 

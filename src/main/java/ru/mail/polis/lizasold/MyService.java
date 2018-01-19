@@ -4,8 +4,6 @@ import com.sun.net.httpserver.HttpServer;
 import org.jetbrains.annotations.NotNull;
 import ru.mail.polis.KVService;
 
-
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.*;
@@ -13,23 +11,23 @@ import java.util.*;
 public class MyService implements KVService {
     private static final String PREFIX = "id=";
     private static final String REPLICAS = "&replicas=";
+    private static final String INSIDE = "&inside";
     @NotNull
     private HttpServer server;
     @NotNull
     private MyDAO dao;
     @NotNull
     private Set<String> topology;
-    private int myPort;
     ServiceManager sm;
-    ErrorHandler eh;
+    PutValueNew pv;
 
 
     public MyService(int port, @NotNull MyDAO dao, @NotNull Set<String> topology) throws IOException {
         this.server = HttpServer.create(new InetSocketAddress(port), 0);
         this.dao = dao;
-        this.myPort = port;
-        this.topology = new HashSet<>(topology);
+        this.topology = new HashSet<>();
         sm = new ServiceManager(port, dao, topology);
+        pv = new PutValueNew();
         createContext();
     }
 
@@ -42,27 +40,28 @@ public class MyService implements KVService {
         });
 
         this.server.createContext("/v0/entity", new ErrorHandler(http -> {
-            final String query = http.getRequestURI().getQuery();
-            final String id = extractId(http.getRequestURI().getQuery());
+            String query = http.getRequestURI().getQuery();
+            boolean inside = false;
+            if (query.contains(INSIDE)) {
+                inside = true;
+                query = query.substring(0, query.indexOf(INSIDE));
+            }
+            final String id = extractId(query);
             if (!query.contains(REPLICAS)) {
                 switch (http.getRequestMethod()) {
                     case "GET":
-                        final byte[] getValue = dao.get(id);
-                        http.sendResponseHeaders(200, getValue.length);
-                        http.getResponseBody().write(getValue);
+                        if (inside && dao.isDeleted(id)) {
+                            http.sendResponseHeaders(202, 0);
+                        } else {
+                            final byte[] getValue = dao.get(id);
+                            http.sendResponseHeaders(200, getValue.length);
+                            http.getResponseBody().write(getValue);
+                        }
                         break;
                     case "PUT":
-                        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-                            byte[] putValue = new byte[1024];
-                            while (true) {
-                                int contentLenght = http.getRequestBody().read(putValue);
-                                if (contentLenght == -1) break;
-                                if (contentLenght > 0) out.write(putValue, 0, contentLenght);
-                            }
-                            putValue = out.toByteArray();
-                            dao.upsert(id, putValue);
-                            http.sendResponseHeaders(201, 0);
-                        }
+                        byte[] putValue = pv.putValueNew(http.getRequestBody());
+                        dao.upsert(id, putValue);
+                        http.sendResponseHeaders(201, 0);
                         break;
                     case "DELETE":
                         dao.delete(id);
